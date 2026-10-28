@@ -30,12 +30,12 @@ final class HttpTurnstileVerifierTest extends TestCase
     {
         $this->client = new StubHttpClient(new Response(200, [], '{"success":true}'));
         $this->factory = new HttpFactory();
-        $this->verifier = new HttpTurnstileVerifier($this->client, $this->factory, $this->factory);
+        $this->verifier = new HttpTurnstileVerifier('secret', $this->client, $this->factory, $this->factory);
     }
 
     public function testSendsOneCorrectlyEncodedPostRequest(): void
     {
-        $request = new VerificationRequest('secret value', 'token+with & symbols');
+        $request = new VerificationRequest('token+with & symbols');
 
         self::assertTrue($this->verifier->verify($request)->isAccepted());
         self::assertCount(1, $this->client->requests);
@@ -50,7 +50,7 @@ final class HttpTurnstileVerifierTest extends TestCase
 
         parse_str($sentRequest->getBody()->getContents(), $fields);
         self::assertSame([
-            'secret' => 'secret value',
+            'secret' => 'secret',
             'response' => 'token+with & symbols',
         ], $fields);
     }
@@ -58,7 +58,6 @@ final class HttpTurnstileVerifierTest extends TestCase
     public function testOptionalFieldsAreOnlySentWhenSupplied(): void
     {
         $this->verifier->verify(new VerificationRequest(
-            'secret',
             'token',
             remoteIp: '192.0.2.1',
             idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
@@ -74,7 +73,7 @@ final class HttpTurnstileVerifierTest extends TestCase
 
         $this->client->requests = [];
         $this->client->response = new Response(200, [], '{"success":true}');
-        $this->verifier->verify(new VerificationRequest('secret', 'token'));
+        $this->verifier->verify(new VerificationRequest('token'));
         parse_str($this->client->requests[0]->getBody()->getContents(), $fields);
         self::assertArrayNotHasKey('remoteip', $fields);
         self::assertArrayNotHasKey('idempotency_key', $fields);
@@ -82,8 +81,8 @@ final class HttpTurnstileVerifierTest extends TestCase
 
     public function testEmptyAndOversizedTokensAreRejectedWithoutHttp(): void
     {
-        $empty = $this->verifier->verify(new VerificationRequest('secret', " \t\n"));
-        $oversized = $this->verifier->verify(new VerificationRequest('secret', str_repeat('x', 2049)));
+        $empty = $this->verifier->verify(new VerificationRequest(" \t\n"));
+        $oversized = $this->verifier->verify(new VerificationRequest(str_repeat('x', 2049)));
 
         self::assertFalse($empty->isAccepted());
         self::assertSame([RejectionReason::InvalidToken], $empty->rejectionReasons());
@@ -95,7 +94,7 @@ final class HttpTurnstileVerifierTest extends TestCase
     public function testMaximumLengthTokenIsSentUnmodified(): void
     {
         $token = str_repeat('x', 2048);
-        $this->verifier->verify(new VerificationRequest('secret', $token));
+        $this->verifier->verify(new VerificationRequest($token));
 
         parse_str($this->client->requests[0]->getBody()->getContents(), $fields);
         self::assertSame($token, $fields['response']);
@@ -112,7 +111,7 @@ final class HttpTurnstileVerifierTest extends TestCase
             'unknown_future_field' => ['harmless' => true],
         ], JSON_THROW_ON_ERROR));
 
-        $result = $this->verifier->verify(new VerificationRequest('secret', 'token'));
+        $result = $this->verifier->verify(new VerificationRequest('token'));
 
         self::assertTrue($result->isAccepted());
         self::assertSame('forms.example.test', $result->hostname());
@@ -126,7 +125,7 @@ final class HttpTurnstileVerifierTest extends TestCase
     {
         $this->client->response = new Response(200, [], '{"success":false,"error-codes":["invalid-input-response","future_code"]}');
 
-        $result = $this->verifier->verify(new VerificationRequest('secret', 'token'));
+        $result = $this->verifier->verify(new VerificationRequest('token'));
 
         self::assertFalse($result->isAccepted());
         self::assertSame(['invalid-input-response', 'future_code'], $result->errorCodes());
@@ -137,16 +136,16 @@ final class HttpTurnstileVerifierTest extends TestCase
     {
         $this->client->response = new Response(200, [], '{"success":true,"action":"signup"}');
         self::assertTrue($this->verifier->verify(
-            new VerificationRequest('secret', 'token', expectedAction: 'signup'),
+            new VerificationRequest('token', expectedAction: 'signup'),
         )->isAccepted());
 
         $this->client->response = new Response(200, [], '{"success":true,"action":"Signup"}');
-        $result = $this->verifier->verify(new VerificationRequest('secret', 'token', expectedAction: 'signup'));
+        $result = $this->verifier->verify(new VerificationRequest('token', expectedAction: 'signup'));
         self::assertFalse($result->isAccepted());
         self::assertSame([RejectionReason::ActionMismatch], $result->rejectionReasons());
 
         $this->client->response = new Response(200, [], '{"success":true}');
-        $result = $this->verifier->verify(new VerificationRequest('secret', 'token', expectedAction: 'signup'));
+        $result = $this->verifier->verify(new VerificationRequest('token', expectedAction: 'signup'));
         self::assertFalse($result->isAccepted());
         self::assertSame([RejectionReason::ActionMismatch], $result->rejectionReasons());
     }
@@ -155,19 +154,19 @@ final class HttpTurnstileVerifierTest extends TestCase
     {
         $this->client->response = new Response(200, [], '{"success":true,"hostname":"Forms.Example.Test"}');
         self::assertTrue($this->verifier->verify(
-            new VerificationRequest('secret', 'token', expectedHostnames: ['forms.example.test']),
+            new VerificationRequest('token', expectedHostnames: ['forms.example.test']),
         )->isAccepted());
 
         $this->client->response = new Response(200, [], '{"success":true,"hostname":"forms.example.test.attacker.invalid"}');
         $result = $this->verifier->verify(
-            new VerificationRequest('secret', 'token', expectedHostnames: ['forms.example.test']),
+            new VerificationRequest('token', expectedHostnames: ['forms.example.test']),
         );
         self::assertFalse($result->isAccepted());
         self::assertSame([RejectionReason::HostnameMismatch], $result->rejectionReasons());
 
         $this->client->response = new Response(200, [], '{"success":true}');
         $result = $this->verifier->verify(
-            new VerificationRequest('secret', 'token', expectedHostnames: ['forms.example.test']),
+            new VerificationRequest('token', expectedHostnames: ['forms.example.test']),
         );
         self::assertFalse($result->isAccepted());
         self::assertSame([RejectionReason::HostnameMismatch], $result->rejectionReasons());
@@ -182,7 +181,6 @@ final class HttpTurnstileVerifierTest extends TestCase
         );
 
         $result = $this->verifier->verify(new VerificationRequest(
-            'secret',
             'token',
             expectedAction: 'signup',
             expectedHostnames: ['example.test'],
@@ -195,13 +193,11 @@ final class HttpTurnstileVerifierTest extends TestCase
     public function testRejectsInvalidRequestConfiguration(): void
     {
         foreach ([
-            fn () => new VerificationRequest('', 'token'),
-            fn () => new VerificationRequest('secret', 'token', remoteIp: 'not-an-ip'),
-            fn () => new VerificationRequest(' ', 'token'),
-            fn () => new VerificationRequest('secret', 'token', idempotencyKey: 'not-a-uuid'),
-            fn () => new VerificationRequest('secret', 'token', expectedAction: ' '),
-            fn () => new VerificationRequest('secret', 'token', expectedHostnames: []),
-            fn () => new VerificationRequest('secret', 'token', expectedHostnames: ['']),
+            fn () => new VerificationRequest('token', remoteIp: 'not-an-ip'),
+            fn () => new VerificationRequest('token', idempotencyKey: 'not-a-uuid'),
+            fn () => new VerificationRequest('token', expectedAction: ' '),
+            fn () => new VerificationRequest('token', expectedHostnames: []),
+            fn () => new VerificationRequest('token', expectedHostnames: ['']),
         ] as $invalidRequest) {
             try {
                 $invalidRequest();
@@ -212,12 +208,32 @@ final class HttpTurnstileVerifierTest extends TestCase
         }
     }
 
+    public function testRejectsEmptySecretWhenVerifierIsConstructed(): void
+    {
+        foreach (['', ' ', "\t\n"] as $secret) {
+            try {
+                new HttpTurnstileVerifier($secret, $this->client, $this->factory, $this->factory);
+                self::fail('Expected an empty secret to be rejected.');
+            } catch (\InvalidArgumentException $exception) {
+                self::assertSame('The Turnstile secret must not be empty.', $exception->getMessage());
+            }
+        }
+
+        self::assertCount(0, $this->client->requests);
+    }
+
     public function testNetworkFailureIsWrappedWithoutSensitiveMessageContent(): void
     {
+        $this->verifier = new HttpTurnstileVerifier(
+            'secret-value',
+            $this->client,
+            $this->factory,
+            $this->factory,
+        );
         $this->client->exception = new StubNetworkException(new Request('POST', 'https://example.test'));
 
         try {
-            $this->verifier->verify(new VerificationRequest('secret-value', 'token-value'));
+            $this->verifier->verify(new VerificationRequest('token-value'));
             self::fail('Expected a transport exception.');
         } catch (TransportException $exception) {
             self::assertStringNotContainsString('secret-value', $exception->getMessage());
@@ -233,7 +249,7 @@ final class HttpTurnstileVerifierTest extends TestCase
         $this->client->exception = $clientException;
 
         try {
-            $this->verifier->verify(new VerificationRequest('secret', 'token'));
+            $this->verifier->verify(new VerificationRequest('token'));
             self::fail('Expected a transport exception.');
         } catch (TransportException $exception) {
             self::assertSame($clientException, $exception->getPrevious());
@@ -242,10 +258,16 @@ final class HttpTurnstileVerifierTest extends TestCase
 
     public function testNonSuccessfulHttpStatusThrowsWithoutResponseBody(): void
     {
+        $this->verifier = new HttpTurnstileVerifier(
+            'secret-value',
+            $this->client,
+            $this->factory,
+            $this->factory,
+        );
         $this->client->response = new Response(503, [], 'secret-value token-value');
 
         try {
-            $this->verifier->verify(new VerificationRequest('secret-value', 'token-value'));
+            $this->verifier->verify(new VerificationRequest('token-value'));
             self::fail('Expected an HTTP status exception.');
         } catch (HttpStatusException $exception) {
             self::assertSame(503, $exception->statusCode());
@@ -257,10 +279,16 @@ final class HttpTurnstileVerifierTest extends TestCase
 
     public function testMalformedJsonThrowsTypedResponseException(): void
     {
+        $this->verifier = new HttpTurnstileVerifier(
+            'secret-value',
+            $this->client,
+            $this->factory,
+            $this->factory,
+        );
         $this->client->response = new Response(200, [], 'secret-value token-value not-json');
 
         try {
-            $this->verifier->verify(new VerificationRequest('secret-value', 'token-value'));
+            $this->verifier->verify(new VerificationRequest('token-value'));
             self::fail('Expected a response exception.');
         } catch (ResponseException $exception) {
             self::assertStringNotContainsString('secret-value', (string) $exception);
@@ -274,7 +302,7 @@ final class HttpTurnstileVerifierTest extends TestCase
         $this->client->response = new Response(200, [], $body);
 
         $this->expectException(ResponseException::class);
-        $this->verifier->verify(new VerificationRequest('secret', 'token'));
+        $this->verifier->verify(new VerificationRequest('token'));
     }
 
     public static function malformedResponseProvider(): iterable
@@ -296,7 +324,7 @@ final class HttpTurnstileVerifierTest extends TestCase
             '{"success":true,"new_metadata":{"version":2}}',
         );
 
-        self::assertTrue($this->verifier->verify(new VerificationRequest('secret', 'token'))->isAccepted());
+        self::assertTrue($this->verifier->verify(new VerificationRequest('token'))->isAccepted());
     }
 }
 

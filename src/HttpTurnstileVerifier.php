@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Softavis\Turnstile;
 
+use InvalidArgumentException;
 use JsonException;
 use RuntimeException;
 use Psr\Http\Client\ClientExceptionInterface;
@@ -20,10 +21,14 @@ final readonly class HttpTurnstileVerifier implements TurnstileVerifier
     private const MAX_TOKEN_LENGTH = 2048;
 
     public function __construct(
+        private string $secret,
         private ClientInterface $httpClient,
         private RequestFactoryInterface $requestFactory,
         private StreamFactoryInterface $streamFactory,
     ) {
+        if (trim($this->secret) === '') {
+            throw new InvalidArgumentException('The Turnstile secret must not be empty.');
+        }
     }
 
     public function verify(VerificationRequest $request): VerificationResult
@@ -36,7 +41,7 @@ final readonly class HttpTurnstileVerifier implements TurnstileVerifier
         }
 
         $fields = [
-            'secret' => $request->secret,
+            'secret' => $this->secret,
             'response' => $request->response,
         ];
 

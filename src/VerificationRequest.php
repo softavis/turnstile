@@ -19,17 +19,12 @@ final readonly class VerificationRequest
      * @param array<array-key, mixed>|null $expectedHostnames Null disables hostname checking.
      */
     public function __construct(
-        public string $secret,
         public string $response,
         public ?string $remoteIp = null,
         public ?string $idempotencyKey = null,
         public ?string $expectedAction = null,
         ?array $expectedHostnames = null,
     ) {
-        if (trim($secret) === '') {
-            throw new InvalidArgumentException('The Turnstile secret must not be empty.');
-        }
-
         if ($remoteIp !== null && filter_var($remoteIp, FILTER_VALIDATE_IP) === false) {
             throw new InvalidArgumentException('The remote IP must be a valid IP address when supplied.');
         }

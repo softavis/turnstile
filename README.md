@@ -1,8 +1,25 @@
 # softavis/turnstile
 
+[![CI](https://img.shields.io/github/actions/workflow/status/softavis/turnstile/ci.yml?branch=master&style=flat&label=CI)](https://github.com/softavis/turnstile/actions/workflows/ci.yml)
+[![PHP requirement](https://img.shields.io/badge/PHP-%5E8.2-777BB4?logo=php&style=flat)](https://github.com/softavis/turnstile/blob/master/composer.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/softavis/turnstile/blob/master/LICENSE)
+
+<!-- Enable these badges after registering the package on Packagist:
+[![Latest Stable Version](https://img.shields.io/packagist/v/softavis/turnstile?style=flat)](https://packagist.org/packages/softavis/turnstile)
+[![Total Downloads](https://img.shields.io/packagist/dt/softavis/turnstile?style=flat)](https://packagist.org/packages/softavis/turnstile)
+-->
+
 A small, framework-independent PHP library for verifying Cloudflare Turnstile tokens on the server. It provides a reusable verification layer with explicit security policies; a separate Symfony integration can consume the verifier interface without coupling this package to a framework.
 
 This package only verifies tokens. It does not provide widgets, framework integrations, middleware, authentication, or CSRF handling.
+
+## Why this package?
+
+We want to reuse the same server-side Turnstile verification across projects and frameworks, with a framework-independent core and a separate Symfony integration. This architecture fits our needs and may fit yours; other packages remain valid choices.
+
+- Explicit PSR-18 client and PSR-17 factories, without requiring a particular HTTP implementation or automatic discovery.
+- Configurable expected action and hostname checks, with rejected verification distinguished from operational failure.
+- A focused verification API without frontend rendering or application authentication logic.
 
 ## Requirements and installation
 
@@ -33,17 +50,19 @@ use Softavis\Turnstile\Exception\TurnstileException;
 use Softavis\Turnstile\HttpTurnstileVerifier;
 use Softavis\Turnstile\VerificationRequest;
 
-$httpClient = new Client();
+$httpClient = new Client([
+    'connect_timeout' => 3.0,
+    'timeout' => 10.0,
+]);
 $psr17Factory = new HttpFactory();
-$verifier = new HttpTurnstileVerifier($httpClient, $psr17Factory, $psr17Factory);
 
 // Obtain these values from your application's explicit configuration and form handling.
 $secret = $configuration['turnstile_secret'];
 $token = $submittedTurnstileToken;
+$verifier = new HttpTurnstileVerifier($secret, $httpClient, $psr17Factory, $psr17Factory);
 
 try {
     $result = $verifier->verify(new VerificationRequest(
-        secret: $secret,
         response: $token,
         remoteIp: $trustedClientIp ?? null,
         expectedAction: 'signup',
@@ -69,6 +88,8 @@ try {
 
 `TurnstileVerifier` is the small interface intended for consumers such as a future Symfony bundle. `HttpTurnstileVerifier` posts once to Cloudflare's HTTPS Siteverify endpoint. `VerificationResult::isAccepted()` is the acceptance check; the result also exposes Cloudflare error codes and available `hostname`, `action`, `challengeTimestamp`, and `cdata` metadata.
 
+The Guzzle timeout values above are examples to adjust for your application. Timeout support and configuration come from the injected HTTP implementation; PSR-18 itself does not standardize timeout options.
+
 ### Expected action and hostname
 
 Set `expectedAction` to an action value your application controls, and `expectedHostnames` to the exact hostname(s) it intends to accept. Do not derive either expectation from untrusted request data. Action comparison is exact. Hostname comparison is case-insensitive but exact: there is no suffix or wildcard matching. A missing Cloudflare response field rejects the verification whenever that expectation is configured. An empty hostname allowlist is invalid. Omitting either expectation disables that additional check; Cloudflare's own token validation still runs.
@@ -79,11 +100,9 @@ When supplied, `remoteIp` must be a valid IP address and `idempotencyKey` must b
 
 An empty/whitespace-only token or a token longer than Cloudflare's documented 2,048-character limit is rejected locally without an HTTP call. Cloudflare `success: false` and configured action/hostname mismatches also produce a rejected result. Local rejection reasons are `RejectionReason` enum cases; Cloudflare's `errorCodes()` remain separate and preserve unknown future code strings.
 
-Network/client failures, non-2xx HTTP status codes, and malformed responses throw typed exceptions under `Softavis\Turnstile\Exception\TurnstileException`: `TransportException`, `HttpStatusException`, and `ResponseException`. Invalid request configuration throws `InvalidArgumentException`. Treat operational failures as inability to verify, not as acceptance.
+Network/client failures, non-2xx HTTP status codes, and malformed responses throw typed exceptions under `Softavis\Turnstile\Exception\TurnstileException`: `TransportException`, `HttpStatusException`, and `ResponseException`. Invalid verifier configuration or request options throw `InvalidArgumentException`. Treat operational failures as inability to verify, not as acceptance.
 
 The library does not log and its generated exception messages do not include the secret, token, request body, or raw response body. An underlying transport exception retained as the previous exception may contain sensitive request details. Application logging should redact secrets, tokens, and other sensitive data, including details retained by transport exceptions.
-
-PSR-18 does not standardize timeout configuration. Configure connection and response timeouts on the HTTP client you inject; this library has no portable timeout option.
 
 ## Token lifecycle and application security
 
@@ -99,14 +118,16 @@ Cloudflare provides test credentials that always pass or always fail validation.
 
 See Cloudflare's [server-side validation guide](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/) and [testing documentation](https://developers.cloudflare.com/turnstile/troubleshooting/testing/) for current details.
 
+## Symfony integration
+
+A dedicated Symfony integration is being developed as [`softavis/turnstile-bundle`](https://github.com/softavis/turnstile-bundle). It will use this library as its verification layer. The bundle is upcoming and is not yet released or available to install.
+
 ## Alternatives
 
-If you need a Symfony integration directly, these existing packages may fit your application better:
+These are independent Symfony integrations with their own features and approaches, and may suit your application's needs:
 
 - [vuillaume-agency/symfony-turnstile](https://github.com/vuillaume-agency/symfony-turnstile)
 - [pixelopen/cloudflare-turnstile-bundle](https://github.com/pixelopen/cloudflare-turnstile-bundle)
-
-They are separate projects with their own scope and design.
 
 ## Development
 
