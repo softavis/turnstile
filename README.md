@@ -1,13 +1,10 @@
 # softavis/turnstile
 
-[![CI](https://img.shields.io/github/actions/workflow/status/softavis/turnstile/ci.yml?branch=master&style=flat&label=CI)](https://github.com/softavis/turnstile/actions/workflows/ci.yml)
-[![PHP requirement](https://img.shields.io/badge/PHP-%5E8.2-777BB4?logo=php&style=flat)](https://github.com/softavis/turnstile/blob/master/composer.json)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/softavis/turnstile/blob/master/LICENSE)
-
-<!-- Enable these badges after registering the package on Packagist:
-[![Latest Stable Version](https://img.shields.io/packagist/v/softavis/turnstile?style=flat)](https://packagist.org/packages/softavis/turnstile)
-[![Total Downloads](https://img.shields.io/packagist/dt/softavis/turnstile?style=flat)](https://packagist.org/packages/softavis/turnstile)
--->
+[![Latest Stable Version](https://img.shields.io/packagist/v/softavis/turnstile?style=flat-square)](https://packagist.org/packages/softavis/turnstile)
+[![CI](https://img.shields.io/github/actions/workflow/status/softavis/turnstile/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/softavis/turnstile/actions/workflows/ci.yml)
+[![Total Downloads](https://img.shields.io/packagist/dt/softavis/turnstile?style=flat-square)](https://packagist.org/packages/softavis/turnstile)
+[![PHP requirement](https://img.shields.io/packagist/php-v/softavis/turnstile?style=flat-square)](https://github.com/softavis/turnstile/blob/master/composer.json)
+[![License: MIT](https://img.shields.io/packagist/l/softavis/turnstile?style=flat-square)](https://github.com/softavis/turnstile/blob/master/LICENSE)
 
 A small, framework-independent PHP library for verifying Cloudflare Turnstile tokens on the server. It provides a reusable verification layer with explicit security policies; a separate Symfony integration can consume the verifier interface without coupling this package to a framework.
 
@@ -86,7 +83,7 @@ try {
 }
 ```
 
-`TurnstileVerifier` is the small interface intended for consumers such as a future Symfony bundle. `HttpTurnstileVerifier` posts once to Cloudflare's HTTPS Siteverify endpoint. `VerificationResult::isAccepted()` is the acceptance check; the result also exposes Cloudflare error codes and available `hostname`, `action`, `challengeTimestamp`, and `cdata` metadata.
+`TurnstileVerifier` is the small interface intended for consumers such as the Symfony bundle. `HttpTurnstileVerifier` posts once to Cloudflare's HTTPS Siteverify endpoint. `VerificationResult::isAccepted()` is the acceptance check; the result also exposes Cloudflare error codes and available `hostname`, `action`, `challengeTimestamp`, and `cdata` metadata.
 
 The Guzzle timeout values above are examples to adjust for your application. Timeout support and configuration come from the injected HTTP implementation; PSR-18 itself does not standardize timeout options.
 
@@ -120,7 +117,13 @@ See Cloudflare's [server-side validation guide](https://developers.cloudflare.co
 
 ## Symfony integration
 
-A dedicated Symfony integration is being developed as [`softavis/turnstile-bundle`](https://github.com/softavis/turnstile-bundle). It will use this library as its verification layer. The bundle is upcoming and is not yet released or available to install.
+Symfony users can use [`softavis/turnstile-bundle`](https://github.com/softavis/turnstile-bundle) ([Packagist](https://packagist.org/packages/softavis/turnstile-bundle)) for Forms, Twig, and opt-in password-login protection. This package remains the framework-independent verification core.
+
+```sh
+composer require softavis/turnstile-bundle
+```
+
+See the [bundle documentation](https://github.com/softavis/turnstile-bundle/blob/master/docs/index.md#credentials-and-configuration) for configuration.
 
 ## Alternatives
 
